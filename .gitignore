@@ -6,13 +6,23 @@ __pycache__/
 *.egg-info/
 .eggs/
 
-# Next.js / Node (web/)
-web/node_modules/
-web/.next/
-web/out/
-web/.env*
-web/*.tsbuildinfo
-web/next-env.d.ts
+# Node / frontend + backend
+frontend/node_modules/
+frontend/dist/
+frontend/.env*
+frontend/*.tsbuildinfo
+
+backend/node_modules/
+backend/dev.db
+backend/.env*
+backend/prisma/migrations/
+backend/*.tsbuildinfo
+
+# Local datasets (large binaries — keep out of Git)
+Data/
+
+# Duplicate of frontend/public/logo.png (serve from public/ only)
+/logo.png
 
 # OS / editor
 .DS_Store
