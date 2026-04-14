@@ -1,0 +1,21 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+.Python
+*.egg-info/
+.eggs/
+
+# Next.js / Node (web/)
+web/node_modules/
+web/.next/
+web/out/
+web/.env*
+web/*.tsbuildinfo
+web/next-env.d.ts
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
