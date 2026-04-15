@@ -8,7 +8,7 @@ export function OctLabelPanel() {
           <span className="text-[color:var(--color-ocean-green)]">Labels</span>
         </p>
         <p className="mt-1 text-sm text-[color:var(--color-muted)]">
-          Palette + annotation tools come next.
+          Tips: Polygon mode → click vertices, then press Enter or the ✓ button (or double-click) to finish. Esc cancels.
         </p>
       </div>
     </aside>
