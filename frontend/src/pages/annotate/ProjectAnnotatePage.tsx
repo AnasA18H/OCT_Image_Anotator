@@ -12,6 +12,7 @@ import {
   FileUp,
   MousePointer2,
   PenLine,
+  Pencil,
   Redo2,
   Ruler,
   ScanLine,
@@ -286,6 +287,7 @@ export function ProjectAnnotatePage() {
 
   const onCanvasClick = (p: ImagePoint) => {
     if (!volume) return;
+    if (mode === "freehand") return;
     if (mode === "point") {
       addAnnotation({ id: makeId(), type: "point", points: [p] });
       return;
@@ -315,6 +317,14 @@ export function ProjectAnnotatePage() {
       }),
     });
   };
+
+  const onFreehandComplete = useCallback(
+    (points: ImagePoint[]) => {
+      if (!volume || points.length < 2) return;
+      addAnnotation({ id: makeId(), type: "freehand", points });
+    },
+    [addAnnotation, makeId, volume],
+  );
 
   const onCanvasDoubleClick = () => {
     if (mode !== "polygon") return;
@@ -704,6 +714,13 @@ export function ProjectAnnotatePage() {
             >
               <Ruler className="h-5 w-5" aria-hidden="true" />
             </IconButton>
+            <IconButton
+              tone={mode === "freehand" ? "accent" : "default"}
+              label="Freehand mode"
+              onClick={() => setMode("freehand")}
+            >
+              <Pencil className="h-5 w-5" aria-hidden="true" />
+            </IconButton>
           </div>
 
           {sliceCount > 1 ? (
@@ -727,6 +744,7 @@ export function ProjectAnnotatePage() {
           draft={sliceDraft}
           onClickImage={volume ? onCanvasClick : undefined}
           onDoubleClickImage={volume ? onCanvasDoubleClick : undefined}
+          onFreehandComplete={volume ? onFreehandComplete : undefined}
           onNavigateSlice={
             volume
               ? (delta) => {

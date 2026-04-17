@@ -14,12 +14,14 @@ export type OctCanvasFrame = {
 /** One marker in original image pixel space (not zoomed canvas pixels). */
 export type ImagePoint = { x: number; y: number };
 
-export type DrawMode = "point" | "polygon" | "line";
+export type DrawMode = "point" | "polygon" | "line" | "freehand";
 
 export type Annotation =
   | { id: string; type: "point"; points: [ImagePoint] }
   | { id: string; type: "line"; points: [ImagePoint, ImagePoint] }
-  | { id: string; type: "polygon"; points: ImagePoint[]; closed: true };
+  | { id: string; type: "polygon"; points: ImagePoint[]; closed: true }
+  /** Phase 5: polyline in image pixels (≥2 points). */
+  | { id: string; type: "freehand"; points: ImagePoint[] };
 
 export type Draft =
   | { type: "polygon"; points: ImagePoint[] }
@@ -32,6 +34,7 @@ export function OctCanvas({
   draft,
   onClickImage,
   onDoubleClickImage,
+  onFreehandComplete,
   onNavigateSlice,
 }: {
   frame: OctCanvasFrame | null;
@@ -41,6 +44,8 @@ export function OctCanvas({
   draft: Draft | null;
   onClickImage?: (p: ImagePoint) => void;
   onDoubleClickImage?: (p: ImagePoint) => void;
+  /** Phase 5: released after drag; points in image space. */
+  onFreehandComplete?: (points: ImagePoint[]) => void;
   /** Touch gesture: two-finger swipe left/right to change slice. */
   onNavigateSlice?: (delta: -1 | 1) => void;
 }) {
@@ -60,6 +65,7 @@ export function OctCanvas({
             draft={draft}
             onClickImage={onClickImage}
             onDoubleClickImage={onDoubleClickImage}
+            onFreehandComplete={onFreehandComplete}
             onNavigateSlice={onNavigateSlice}
           />
         ) : (
@@ -89,6 +95,7 @@ function CanvasFrame({
   draft,
   onClickImage,
   onDoubleClickImage,
+  onFreehandComplete,
   onNavigateSlice,
 }: {
   frame: OctCanvasFrame;
@@ -97,6 +104,7 @@ function CanvasFrame({
   draft: Draft | null;
   onClickImage?: (p: ImagePoint) => void;
   onDoubleClickImage?: (p: ImagePoint) => void;
+  onFreehandComplete?: (points: ImagePoint[]) => void;
   onNavigateSlice?: (delta: -1 | 1) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -106,6 +114,12 @@ function CanvasFrame({
   const DEFAULT_ZOOM = 0.6;
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [hoverImage, setHoverImage] = useState<ImagePoint | null>(null);
+  /** In-progress freehand stroke (image space); committed on pointer up. */
+  const [freehandLive, setFreehandLive] = useState<ImagePoint[] | null>(null);
+  const suppressNextClickRef = useRef(false);
+  const freehandPointerIdRef = useRef<number | null>(null);
+  /** Latest stroke samples (synced with freehandLive for paint). */
+  const freehandStrokeRef = useRef<ImagePoint[]>([]);
 
   const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
 
@@ -121,6 +135,111 @@ function CanvasFrame({
   function clampZoom(z: number) {
     return Math.max(0.2, Math.min(6, Math.round(z * 100) / 100));
   }
+
+  // Trackpad gestures: pinch-to-zoom typically comes through as ctrlKey+wheel.
+  // Two-finger horizontal scroll comes through as wheel with deltaX.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const zoomRef = { current: DEFAULT_ZOOM };
+    const setZoomSmooth = (next: number) => setZoom(next);
+
+    const wheelState = {
+      raf: 0 as number | 0,
+      pendingZoomDelta: 0,
+      pendingSliceDeltaX: 0,
+      lastSliceAt: 0,
+    };
+
+    const applyPending = () => {
+      wheelState.raf = 0;
+
+      // Apply pinch zoom (accumulated).
+      if (wheelState.pendingZoomDelta !== 0) {
+        const step = 0.0016; // slightly gentler than before for smoothness
+        const dz = wheelState.pendingZoomDelta;
+        wheelState.pendingZoomDelta = 0;
+        const next = clampZoom(zoomRef.current * Math.exp(-dz * step));
+        zoomRef.current = next;
+        setZoomSmooth(next);
+      }
+
+      // Apply slice navigation from horizontal scroll.
+      if (wheelState.pendingSliceDeltaX !== 0 && onNavigateSlice) {
+        const dx = wheelState.pendingSliceDeltaX;
+        // keep remainder so slow scroll still works smoothly
+        const threshold = 55;
+        const now = Date.now();
+        const cooldownMs = 120;
+        if (now - wheelState.lastSliceAt >= cooldownMs) {
+          if (dx >= threshold) {
+            wheelState.pendingSliceDeltaX = dx - threshold;
+            wheelState.lastSliceAt = now;
+            onNavigateSlice(1);
+          } else if (dx <= -threshold) {
+            wheelState.pendingSliceDeltaX = dx + threshold;
+            wheelState.lastSliceAt = now;
+            onNavigateSlice(-1);
+          }
+        }
+        // If we still have enough delta left, schedule another frame.
+        if (Math.abs(wheelState.pendingSliceDeltaX) >= threshold && wheelState.raf === 0) {
+          wheelState.raf = requestAnimationFrame(applyPending);
+        }
+      }
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      // Only handle if the pointer is over the canvas.
+      // We prevent default to avoid page scroll/zoom while interacting with the image.
+      const wantsPinchZoom = e.ctrlKey;
+      const wantsSliceScroll = !e.ctrlKey && Math.abs(e.deltaX) > Math.abs(e.deltaY) * 1.2;
+
+      if (!wantsPinchZoom && !wantsSliceScroll) return;
+      e.preventDefault();
+
+      if (wantsPinchZoom) {
+        // ctrlKey+wheel: negative deltaY usually means zoom in.
+        wheelState.pendingZoomDelta += e.deltaY;
+        if (wheelState.raf === 0) wheelState.raf = requestAnimationFrame(applyPending);
+      } else if (wantsSliceScroll && onNavigateSlice) {
+        wheelState.pendingSliceDeltaX += e.deltaX;
+        if (wheelState.raf === 0) wheelState.raf = requestAnimationFrame(applyPending);
+      }
+    };
+
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      canvas.removeEventListener("wheel", onWheel as EventListener);
+      if (wheelState.raf) cancelAnimationFrame(wheelState.raf);
+    };
+  }, [onNavigateSlice]);
+
+  useEffect(() => {
+    if (mode === "freehand") return;
+    const id = requestAnimationFrame(() => {
+      setFreehandLive(null);
+      freehandStrokeRef.current = [];
+      freehandPointerIdRef.current = null;
+    });
+    return () => cancelAnimationFrame(id);
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== "freehand") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (!freehandLive || freehandLive.length === 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      freehandStrokeRef.current = [];
+      setFreehandLive(null);
+      suppressNextClickRef.current = true;
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [freehandLive, mode]);
 
   // Base scale: keep 1:1 unless the slice is huge.
   const baseMaxW = 1100;
@@ -220,6 +339,27 @@ function CanvasFrame({
     [cssH, cssW, frame.height, frame.width, seaStroke],
   );
 
+  /** Freehand stroke: open polyline with rounded caps (Phase 5). */
+  const drawFreehandPolyline = useCallback(
+    (ctx: CanvasRenderingContext2D, pts: ImagePoint[]) => {
+      if (pts.length < 2) return;
+      ctx.save();
+      ctx.strokeStyle = seaStroke;
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      const first = pts[0]!;
+      ctx.moveTo((first.x / frame.width) * cssW, (first.y / frame.height) * cssH);
+      for (const p of pts.slice(1)) {
+        ctx.lineTo((p.x / frame.width) * cssW, (p.y / frame.height) * cssH);
+      }
+      ctx.stroke();
+      ctx.restore();
+    },
+    [cssH, cssW, frame.height, frame.width, seaStroke],
+  );
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -259,6 +399,8 @@ function CanvasFrame({
       } else if (a.type === "polygon") {
         drawPolygon(ctx, a.points, { closed: true, fill: true, dashed: false });
         for (const p of a.points) drawPoint(ctx, p);
+      } else if (a.type === "freehand") {
+        drawFreehandPolyline(ctx, a.points);
       }
     }
 
@@ -280,16 +422,22 @@ function CanvasFrame({
     } else if (draft && draft.type === "line") {
       drawPoint(ctx, draft.points[0]);
     }
+
+    if (freehandLive && freehandLive.length >= 2) {
+      drawFreehandPolyline(ctx, freehandLive);
+    }
   }, [
     annotations,
     cssH,
     cssW,
     dpr,
     draft,
+    drawFreehandPolyline,
     drawLine,
     drawPoint,
     drawPolygon,
     frame.bitmap,
+    freehandLive,
     frame.height,
     frame.rgba,
     frame.width,
@@ -329,17 +477,71 @@ function CanvasFrame({
         aria-label="OCT slice canvas"
         className="cursor-crosshair rounded-xl border border-[color:var(--color-ocean-green)]/25 bg-black/5"
         style={{ touchAction: "none" }}
-        onMouseMove={(e) => {
+        onPointerMove={(e) => {
           const p = clientToImage(e.clientX, e.clientY);
           setHoverImage(p);
+          if (mode !== "freehand") return;
+          if (freehandPointerIdRef.current !== e.pointerId) return;
+          if ((e.buttons & 1) === 0) return;
+          if (!p) return;
+          const prev = freehandStrokeRef.current;
+          const last = prev[prev.length - 1];
+          if (last) {
+            const dx = p.x - last.x;
+            const dy = p.y - last.y;
+            if (dx * dx + dy * dy < 0.72 * 0.72) return;
+          }
+          const next = [...prev, p];
+          freehandStrokeRef.current = next;
+          setFreehandLive(next);
         }}
-        onMouseLeave={() => setHoverImage(null)}
+        onPointerLeave={() => setHoverImage(null)}
+        onPointerDown={(e) => {
+          if (mode !== "freehand" || e.button !== 0) return;
+          const p = clientToImage(e.clientX, e.clientY);
+          if (!p) return;
+          e.preventDefault();
+          suppressNextClickRef.current = true;
+          freehandPointerIdRef.current = e.pointerId;
+          freehandStrokeRef.current = [p];
+          setFreehandLive([p]);
+          (e.currentTarget as HTMLCanvasElement).setPointerCapture(e.pointerId);
+        }}
+        onPointerUp={(e) => {
+          if (mode !== "freehand") return;
+          if (freehandPointerIdRef.current !== e.pointerId) return;
+          freehandPointerIdRef.current = null;
+          const el = e.currentTarget as HTMLCanvasElement;
+          try {
+            el.releasePointerCapture(e.pointerId);
+          } catch {
+            /* already released */
+          }
+          const pts = freehandStrokeRef.current;
+          freehandStrokeRef.current = [];
+          setFreehandLive(null);
+          if (pts.length >= 2 && onFreehandComplete) onFreehandComplete(pts);
+        }}
+        onPointerCancel={(e) => {
+          if (mode !== "freehand") return;
+          if (freehandPointerIdRef.current !== e.pointerId) return;
+          freehandPointerIdRef.current = null;
+          freehandStrokeRef.current = [];
+          setFreehandLive(null);
+          suppressNextClickRef.current = true;
+        }}
         onClick={(e) => {
+          if (suppressNextClickRef.current) {
+            suppressNextClickRef.current = false;
+            return;
+          }
+          if (mode === "freehand") return;
           if (!onClickImage) return;
           const p = clientToImage(e.clientX, e.clientY);
           if (p) onClickImage(p);
         }}
         onDoubleClick={(e) => {
+          if (mode === "freehand") return;
           if (!onDoubleClickImage) return;
           const p = clientToImage(e.clientX, e.clientY);
           if (p) onDoubleClickImage(p);
