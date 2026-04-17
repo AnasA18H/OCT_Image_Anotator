@@ -13,29 +13,33 @@ C2  Parse volumetric data 100–512 sl.  [partial]  TIFF + multiframe DICOM OK; 
 C3  Single-slice display               [done]
 C4  Slice navigation + index visible  [done]     "Slice n / N" + slider (when >1 slice)
 C5  Firefox / Safari / Edge             [partial]  Not formally tested; Chrome-first dev
-C6  Zoom +/- and wheel, cursor center   [partial]  +/- on canvas; wheel + cursor center = open (C6)
-C7  Pan (drag viewport)                [open]     Phase 7.3 / C7
-C8  Annotations fixed under pan/zoom   [partial]  Points stored in image coords (A6); pan not implemented
+C6  Zoom +/- and wheel, cursor center   [done]     Toolbar + ctrl+wheel; cursor-centered zoom (wheel/pinch/buttons)
+C7  Pan (drag viewport)                [done]     Pan mode (hand); drag scrolls viewport
+C8  Annotations fixed under pan/zoom   [done]     Image-space coords + scroll-aware clientToImage
 C9  60 fps pan/zoom                   [open]     Phase 7 / N3
 
 ----------------------------------------------------------------------
 B. ProjectInfo — Annotations (A1–A10)
 ----------------------------------------------------------------------
-A1  Polygon (closed polyline)          [open]     Phase 4; points-only started (Phase 3)
-A2  Freehand (critical)                [open]     Phase 5
-A3  Per-slice annotations              [partial]  Points keyed by slice; not full annotation model
-A4  Multiple annotations per slice     [partial]  Multiple points; no polygon/freehand objects yet
-A5  Linked to surface label            [open]     Phase 6
+A1  Polygon (closed polyline)          [done]     Polygon mode + fill
+A2  Freehand (critical)                [done]     Phase 5
+A3  Per-slice annotations              [done]     annotationsBySlice
+A4  Multiple annotations per slice     [done]     Point/line/polygon/freehand list per slice
+A5  Linked to surface label            [done]     Phase 6: labelId + active label color
 A6  (x,y) in original image pixels     [done]     OctCanvas + pointsBySlice
 A7  Move points                        [open]     Phase 8
 A8  Delete annotation                  [partial]  Clear slice only; no per-annotation delete
 A9  Remove last polygon point          [open]     SHOULD — Phase 4+
-A10 Undo/redo                         [open]     SHOULD — Phase 8
+A10 Undo/redo                         [done]     History on annotate page (per-slice state)
 
 ----------------------------------------------------------------------
 C. ProjectInfo — Labels (L1–L8)
 ----------------------------------------------------------------------
-L1–L8  Palette, colors, persist, etc.  [open]     Phase 6; panel placeholder only
+L1–L3  Default ILM/RPE/NFL, active, color on draw [done] Phase 6
+L4–L5  Add custom label (random color), delete+confirm [done] Phase 6
+L6    Delete removes matching annotations (all slices) [done] Phase 6
+L7    Reorder labels                      [done]     Up/down buttons (Phase 6.7)
+L8    Persist label defs across sessions  [open]     In-memory per project session; IDB/export TBD
 
 ----------------------------------------------------------------------
 D. ProjectInfo — Export (E1–E5)
@@ -55,8 +59,8 @@ D5  Lazy / responsive with big stacks  [partial]  Worker + cache; not proven at 
 ----------------------------------------------------------------------
 F. ProjectInfo — UI layout (Step 9)
 ----------------------------------------------------------------------
-Canvas + slider + zoom                  [partial]  Toolbar: missing Freehand/Polygon/Pan/Undo/Export (Step 9)
-Label palette + Export button          [open]
+Canvas + slider + zoom                  [partial]  Pan + Step 9 polish TBD
+Label palette + Export button          [partial]  Label palette done; export Phase 9
 
 ----------------------------------------------------------------------
 G. ProjectInfo — Non-functional (N1–N6) & testing (Sec 8)
