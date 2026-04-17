@@ -1,6 +1,6 @@
 Web Annotation Tool – Module List
 Also track client requirements (C/A/L/E/D/N) in Docs/RequirementsCoverage.txt vs Docs/ProjectInfo.txt — update both when scope changes.
-Progress: Phase 3.1–3.4 implemented (image-space x/y, click points, per-slice storage, clear slice). Phase 2.2 TIFF done. Phase 2.1 & 2.3: uncompressed / non-fragment DICOM in dicomWorker (Explicit/Implicit VR LE + BE raw Pixel Data; multi-frame via NumberOfFrames). JPEG/J2K/encapsulated not supported — use uncompressed or TIFF. Phase 1.6 mock data skipped (real volumes only).
+Progress: Phase 3.1–3.4 implemented (image-space x/y, click points, per-slice storage, clear slice). Phase 2.2 TIFF done. Phase 2.1 & 2.3: uncompressed / non-fragment DICOM in dicomWorker (Explicit/Implicit VR LE + BE raw Pixel Data; multi-frame via NumberOfFrames). JPEG/J2K/encapsulated not supported — use uncompressed or TIFF. Phase 1.6 mock data skipped (real volumes only). Phase 5.1–5.3: freehand mode (pointer drag, release to commit, live polyline; Esc cancels in-progress stroke).
 PHASE 1: Foundation (Sprint 1)
 Module	What Needs to Be Done
 1.1	Create the basic page with a canvas area, toolbar area, and label panel area
