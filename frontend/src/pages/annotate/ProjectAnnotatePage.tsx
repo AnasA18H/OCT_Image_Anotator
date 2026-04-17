@@ -8,18 +8,26 @@ import {
   ChevronLeft,
   ChevronRight,
   Check,
+  CircleDot,
   Eraser,
   FileUp,
-  MousePointer2,
-  PenLine,
-  Pencil,
+  Hand,
+  Pentagon,
   Redo2,
-  Ruler,
   ScanLine,
+  Slash,
+  Spline,
   Undo2,
   X,
 } from "lucide-react";
 import type { Annotation, DrawMode, Draft, ImagePoint, OctCanvasFrame } from "../../components/oct/OctCanvas";
+import {
+  colorToAnnotationStyle,
+  colorToAnnotationStyleActive,
+  DEFAULT_SURFACE_LABELS,
+  randomLabelColor,
+  type SurfaceLabel,
+} from "../../lib/surfaceLabels";
 import { useProject } from "../../lib/useProjects";
 import { deleteProjectVolume, getProjectVolume, setProjectVolume } from "../../lib/idb";
 
@@ -182,6 +190,8 @@ export function ProjectAnnotatePage() {
     future: [],
   });
   const [mode, setMode] = useState<DrawMode>("point");
+  const [labels, setLabels] = useState<SurfaceLabel[]>(() => [...DEFAULT_SURFACE_LABELS]);
+  const [activeLabelId, setActiveLabelId] = useState<string | null>(() => DEFAULT_SURFACE_LABELS[0]!.id);
 
   const cacheRef = useRef<Map<number, OctCanvasFrame>>(new Map());
   const [, setCacheVersion] = useState(0);
@@ -243,7 +253,34 @@ export function ProjectAnnotatePage() {
 
   useEffect(() => {
     dispatchHistory({ type: "reset" });
+    setLabels([...DEFAULT_SURFACE_LABELS]);
+    setActiveLabelId(DEFAULT_SURFACE_LABELS[0]!.id);
   }, [id]);
+
+  const resolveAnnotationStyle = useCallback(
+    (labelId: string) => {
+      const lab = labels.find((l) => l.id === labelId);
+      const color = lab?.color ?? labels[0]?.color ?? "#666666";
+      if (activeLabelId !== null && labelId === activeLabelId) {
+        return colorToAnnotationStyleActive(color);
+      }
+      return colorToAnnotationStyle(color);
+    },
+    [activeLabelId, labels],
+  );
+
+  const draftStyle = useMemo(() => {
+    if (activeLabelId === null) return colorToAnnotationStyle("#9ca3af");
+    return resolveAnnotationStyle(activeLabelId);
+  }, [activeLabelId, resolveAnnotationStyle]);
+
+  const clearActiveLabelSelection = useCallback(() => {
+    setActiveLabelId(null);
+    dispatchHistory({
+      type: "commit",
+      update: (s) => ({ ...s, draftBySlice: { ...s.draftBySlice, [sliceIdx]: null } }),
+    });
+  }, [sliceIdx]);
 
   const makeId = useCallback(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -287,9 +324,11 @@ export function ProjectAnnotatePage() {
 
   const onCanvasClick = (p: ImagePoint) => {
     if (!volume) return;
+    if (mode === "pan") return;
+    if (!activeLabelId) return;
     if (mode === "freehand") return;
     if (mode === "point") {
-      addAnnotation({ id: makeId(), type: "point", points: [p] });
+      addAnnotation({ id: makeId(), labelId: activeLabelId, type: "point", points: [p] });
       return;
     }
     if (mode === "line") {
@@ -297,7 +336,12 @@ export function ProjectAnnotatePage() {
         setSliceDraft({ type: "line", points: [p] });
         return;
       }
-      addAnnotation({ id: makeId(), type: "line", points: [sliceDraft.points[0], p] });
+      addAnnotation({
+        id: makeId(),
+        labelId: activeLabelId,
+        type: "line",
+        points: [sliceDraft.points[0], p],
+      });
       dispatchHistory({ type: "commit", update: (s) => ({ ...s, draftBySlice: { ...s.draftBySlice, [sliceIdx]: null } }) });
       return;
     }
@@ -320,17 +364,24 @@ export function ProjectAnnotatePage() {
 
   const onFreehandComplete = useCallback(
     (points: ImagePoint[]) => {
-      if (!volume || points.length < 2) return;
-      addAnnotation({ id: makeId(), type: "freehand", points });
+      if (!volume || !activeLabelId || points.length < 2) return;
+      addAnnotation({ id: makeId(), labelId: activeLabelId, type: "freehand", points });
     },
-    [addAnnotation, makeId, volume],
+    [activeLabelId, addAnnotation, makeId, volume],
   );
 
   const onCanvasDoubleClick = () => {
+    if (!activeLabelId) return;
     if (mode !== "polygon") return;
     if (!sliceDraft || sliceDraft.type !== "polygon") return;
     if (sliceDraft.points.length < 3) return;
-    addAnnotation({ id: makeId(), type: "polygon", points: sliceDraft.points, closed: true });
+    addAnnotation({
+      id: makeId(),
+      labelId: activeLabelId,
+      type: "polygon",
+      points: sliceDraft.points,
+      closed: true,
+    });
     dispatchHistory({ type: "commit", update: (s) => ({ ...s, draftBySlice: { ...s.draftBySlice, [sliceIdx]: null } }) });
   };
 
@@ -373,16 +424,66 @@ export function ProjectAnnotatePage() {
   }, [mode, sliceDraft, sliceIdx]);
 
   const canFinishPolygon =
-    mode === "polygon" && sliceDraft?.type === "polygon" && sliceDraft.points.length >= 3;
+    activeLabelId !== null &&
+    mode === "polygon" &&
+    sliceDraft?.type === "polygon" &&
+    sliceDraft.points.length >= 3;
 
   const finishPolygon = useCallback(() => {
-    if (!canFinishPolygon) return;
-    addAnnotation({ id: makeId(), type: "polygon", points: sliceDraft!.points, closed: true });
+    if (!canFinishPolygon || !activeLabelId) return;
+    addAnnotation({
+      id: makeId(),
+      labelId: activeLabelId,
+      type: "polygon",
+      points: sliceDraft!.points,
+      closed: true,
+    });
     dispatchHistory({
       type: "commit",
       update: (s) => ({ ...s, draftBySlice: { ...s.draftBySlice, [sliceIdx]: null } }),
     });
-  }, [addAnnotation, canFinishPolygon, makeId, sliceDraft, sliceIdx]);
+  }, [activeLabelId, addAnnotation, canFinishPolygon, makeId, sliceDraft, sliceIdx]);
+
+  const addSurfaceLabel = useCallback(
+    (name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      const nid = makeId();
+      setLabels((prev) => [...prev, { id: nid, name: trimmed, color: randomLabelColor() }]);
+      setActiveLabelId(nid);
+    },
+    [makeId],
+  );
+
+  const deleteSurfaceLabel = useCallback(
+    (labelId: string) => {
+      if (labels.length <= 1) return;
+      const lab = labels.find((l) => l.id === labelId);
+      if (!lab) return;
+      if (
+        !window.confirm(
+          `Remove “${lab.name}” and delete all annotations that use this label on every slice?`,
+        )
+      ) {
+        return;
+      }
+      const remaining = labels.filter((l) => l.id !== labelId);
+      setLabels(remaining);
+      setActiveLabelId((cur) => (cur === labelId ? remaining[0]!.id : cur));
+      dispatchHistory({
+        type: "commit",
+        update: (s) => {
+          const nextAnn: Record<number, Annotation[]> = {};
+          for (const [key, list] of Object.entries(s.annotationsBySlice)) {
+            const idx = Number(key);
+            nextAnn[idx] = list.filter((a) => a.labelId !== labelId);
+          }
+          return { ...s, annotationsBySlice: nextAnn };
+        },
+      });
+    },
+    [labels],
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -695,31 +796,38 @@ export function ProjectAnnotatePage() {
           <div className="flex items-center gap-1">
             <IconButton
               tone={mode === "point" ? "accent" : "default"}
-              label="Point mode"
+              label="Point — click to place a marker"
               onClick={() => setMode("point")}
             >
-              <MousePointer2 className="h-5 w-5" aria-hidden="true" />
+              <CircleDot className="h-5 w-5" aria-hidden="true" />
             </IconButton>
             <IconButton
               tone={mode === "polygon" ? "accent" : "default"}
-              label="Polygon mode"
+              label="Polygon — click vertices; Enter, toolbar, or double-click to close"
               onClick={() => setMode("polygon")}
             >
-              <PenLine className="h-5 w-5" aria-hidden="true" />
+              <Pentagon className="h-5 w-5" aria-hidden="true" />
             </IconButton>
             <IconButton
               tone={mode === "line" ? "accent" : "default"}
-              label="Line mode"
+              label="Line — click two points for a straight segment"
               onClick={() => setMode("line")}
             >
-              <Ruler className="h-5 w-5" aria-hidden="true" />
+              <Slash className="h-5 w-5" aria-hidden="true" />
             </IconButton>
             <IconButton
               tone={mode === "freehand" ? "accent" : "default"}
-              label="Freehand mode"
+              label="Freehand — drag to draw; release to finish"
               onClick={() => setMode("freehand")}
             >
-              <Pencil className="h-5 w-5" aria-hidden="true" />
+              <Spline className="h-5 w-5" aria-hidden="true" />
+            </IconButton>
+            <IconButton
+              tone={mode === "pan" ? "accent" : "default"}
+              label="Pan — drag to move the image"
+              onClick={() => setMode("pan")}
+            >
+              <Hand className="h-5 w-5" aria-hidden="true" />
             </IconButton>
           </div>
 
@@ -730,7 +838,7 @@ export function ProjectAnnotatePage() {
               max={sliceCount - 1}
               value={sliceIdx}
               onChange={(e) => setSliceIdx(Number(e.target.value))}
-              className="oct-slider w-[min(820px,65vw)] cursor-pointer"
+              className="oct-slider w-[min(420px,42vw)] cursor-pointer"
             />
           ) : null}
         </div>
@@ -742,6 +850,9 @@ export function ProjectAnnotatePage() {
           annotations={sliceAnnotations}
           mode={mode}
           draft={sliceDraft}
+          resolveAnnotationStyle={resolveAnnotationStyle}
+          draftStyle={draftStyle}
+          annotationCommitEnabled={activeLabelId !== null}
           onClickImage={volume ? onCanvasClick : undefined}
           onDoubleClickImage={volume ? onCanvasDoubleClick : undefined}
           onFreehandComplete={volume ? onFreehandComplete : undefined}
@@ -756,7 +867,14 @@ export function ProjectAnnotatePage() {
               : undefined
           }
         />
-        <OctLabelPanel />
+        <OctLabelPanel
+          labels={labels}
+          activeLabelId={activeLabelId}
+          onSelectLabel={(id) => setActiveLabelId(id)}
+          onClearActiveLabel={clearActiveLabelSelection}
+          onAddLabel={addSurfaceLabel}
+          onDeleteLabel={deleteSurfaceLabel}
+        />
       </div>
     </div>
   );
