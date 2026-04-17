@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { AnnotationDrawStyle } from "../../lib/surfaceLabels";
 import { IconButton } from "../ui";
 import { Maximize2, Minus, Plus } from "lucide-react";
 
@@ -14,14 +15,14 @@ export type OctCanvasFrame = {
 /** One marker in original image pixel space (not zoomed canvas pixels). */
 export type ImagePoint = { x: number; y: number };
 
-export type DrawMode = "point" | "polygon" | "line" | "freehand";
+export type DrawMode = "point" | "polygon" | "line" | "freehand" | "pan";
 
 export type Annotation =
-  | { id: string; type: "point"; points: [ImagePoint] }
-  | { id: string; type: "line"; points: [ImagePoint, ImagePoint] }
-  | { id: string; type: "polygon"; points: ImagePoint[]; closed: true }
+  | { id: string; labelId: string; type: "point"; points: [ImagePoint] }
+  | { id: string; labelId: string; type: "line"; points: [ImagePoint, ImagePoint] }
+  | { id: string; labelId: string; type: "polygon"; points: ImagePoint[]; closed: true }
   /** Phase 5: polyline in image pixels (≥2 points). */
-  | { id: string; type: "freehand"; points: ImagePoint[] };
+  | { id: string; labelId: string; type: "freehand"; points: ImagePoint[] };
 
 export type Draft =
   | { type: "polygon"; points: ImagePoint[] }
@@ -36,12 +37,21 @@ export function OctCanvas({
   onDoubleClickImage,
   onFreehandComplete,
   onNavigateSlice,
+  resolveAnnotationStyle,
+  draftStyle,
+  annotationCommitEnabled = true,
 }: {
   frame: OctCanvasFrame | null;
   /** Current slice only — parent keeps per-slice maps. */
   annotations: Annotation[];
   mode: DrawMode;
   draft: Draft | null;
+  /** Phase 6: stroke/fills from label id (annotations store labelId). */
+  resolveAnnotationStyle: (labelId: string) => AnnotationDrawStyle;
+  /** Phase 6: in-progress draft + live freehand use active label color. */
+  draftStyle: AnnotationDrawStyle;
+  /** When false, freehand stroke is not started (no active label). */
+  annotationCommitEnabled?: boolean;
   onClickImage?: (p: ImagePoint) => void;
   onDoubleClickImage?: (p: ImagePoint) => void;
   /** Phase 5: released after drag; points in image space. */
@@ -67,6 +77,9 @@ export function OctCanvas({
             onDoubleClickImage={onDoubleClickImage}
             onFreehandComplete={onFreehandComplete}
             onNavigateSlice={onNavigateSlice}
+            resolveAnnotationStyle={resolveAnnotationStyle}
+            draftStyle={draftStyle}
+            annotationCommitEnabled={annotationCommitEnabled}
           />
         ) : (
           <CanvasEmpty />
@@ -97,21 +110,38 @@ function CanvasFrame({
   onDoubleClickImage,
   onFreehandComplete,
   onNavigateSlice,
+  resolveAnnotationStyle,
+  draftStyle,
+  annotationCommitEnabled = true,
 }: {
   frame: OctCanvasFrame;
   annotations: Annotation[];
   mode: DrawMode;
   draft: Draft | null;
+  resolveAnnotationStyle: (labelId: string) => AnnotationDrawStyle;
+  draftStyle: AnnotationDrawStyle;
+  annotationCommitEnabled?: boolean;
   onClickImage?: (p: ImagePoint) => void;
   onDoubleClickImage?: (p: ImagePoint) => void;
   onFreehandComplete?: (points: ImagePoint[]) => void;
   onNavigateSlice?: (delta: -1 | 1) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   const offscreenRef = useRef<HTMLCanvasElement | null>(null);
+  /** Last pointer position for wheel zoom anchor (viewport client coords). */
+  const wheelPointerRef = useRef({ x: 0, y: 0 });
+  const panDragRef = useRef<{
+    active: boolean;
+    startX: number;
+    startY: number;
+    scrollL: number;
+    scrollT: number;
+  } | null>(null);
 
   // Default zoom: slightly zoomed-out from baseline (comfortable view).
   const DEFAULT_ZOOM = 0.6;
+  const zoomRef = useRef(DEFAULT_ZOOM);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [hoverImage, setHoverImage] = useState<ImagePoint | null>(null);
   /** In-progress freehand stroke (image space); committed on pointer up. */
@@ -136,14 +166,21 @@ function CanvasFrame({
     return Math.max(0.2, Math.min(6, Math.round(z * 100) / 100));
   }
 
-  // Trackpad gestures: pinch-to-zoom typically comes through as ctrlKey+wheel.
-  // Two-finger horizontal scroll comes through as wheel with deltaX.
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  /** After zoom changes, re-align scroll so image point under anchor stays fixed (Phase 7.2 / 7.4). */
+  const scrollAnchorAfterZoomRef = useRef<{
+    z0: number;
+    clientX: number;
+    clientY: number;
+  } | null>(null);
 
-    const zoomRef = { current: DEFAULT_ZOOM };
-    const setZoomSmooth = (next: number) => setZoom(next);
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
+
+  // Trackpad gestures: pinch-to-zoom (cursor-centered) + horizontal scroll for slice.
+  useEffect(() => {
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return;
 
     const wheelState = {
       raf: 0 as number | 0,
@@ -155,23 +192,24 @@ function CanvasFrame({
     const applyPending = () => {
       wheelState.raf = 0;
 
-      // Apply pinch zoom (accumulated).
       if (wheelState.pendingZoomDelta !== 0) {
-        const step = 0.0016; // slightly gentler than before for smoothness
+        const step = 0.00135;
         const dz = wheelState.pendingZoomDelta;
         wheelState.pendingZoomDelta = 0;
-        const next = clampZoom(zoomRef.current * Math.exp(-dz * step));
-        zoomRef.current = next;
-        setZoomSmooth(next);
+        const z0 = zoomRef.current;
+        const z1 = clampZoom(z0 * Math.exp(-dz * step));
+        if (Math.abs(z1 - z0) > 1e-8) {
+          const { x, y } = wheelPointerRef.current;
+          scrollAnchorAfterZoomRef.current = { z0, clientX: x, clientY: y };
+          setZoom(z1);
+        }
       }
 
-      // Apply slice navigation from horizontal scroll.
       if (wheelState.pendingSliceDeltaX !== 0 && onNavigateSlice) {
         const dx = wheelState.pendingSliceDeltaX;
-        // keep remainder so slow scroll still works smoothly
-        const threshold = 55;
+        const threshold = 52;
         const now = Date.now();
-        const cooldownMs = 120;
+        const cooldownMs = 110;
         if (now - wheelState.lastSliceAt >= cooldownMs) {
           if (dx >= threshold) {
             wheelState.pendingSliceDeltaX = dx - threshold;
@@ -183,7 +221,6 @@ function CanvasFrame({
             onNavigateSlice(-1);
           }
         }
-        // If we still have enough delta left, schedule another frame.
         if (Math.abs(wheelState.pendingSliceDeltaX) >= threshold && wheelState.raf === 0) {
           wheelState.raf = requestAnimationFrame(applyPending);
         }
@@ -191,8 +228,7 @@ function CanvasFrame({
     };
 
     const onWheel = (e: WheelEvent) => {
-      // Only handle if the pointer is over the canvas.
-      // We prevent default to avoid page scroll/zoom while interacting with the image.
+      wheelPointerRef.current = { x: e.clientX, y: e.clientY };
       const wantsPinchZoom = e.ctrlKey;
       const wantsSliceScroll = !e.ctrlKey && Math.abs(e.deltaX) > Math.abs(e.deltaY) * 1.2;
 
@@ -200,7 +236,6 @@ function CanvasFrame({
       e.preventDefault();
 
       if (wantsPinchZoom) {
-        // ctrlKey+wheel: negative deltaY usually means zoom in.
         wheelState.pendingZoomDelta += e.deltaY;
         if (wheelState.raf === 0) wheelState.raf = requestAnimationFrame(applyPending);
       } else if (wantsSliceScroll && onNavigateSlice) {
@@ -209,9 +244,9 @@ function CanvasFrame({
       }
     };
 
-    canvas.addEventListener("wheel", onWheel, { passive: false });
+    scrollEl.addEventListener("wheel", onWheel, { passive: false });
     return () => {
-      canvas.removeEventListener("wheel", onWheel as EventListener);
+      scrollEl.removeEventListener("wheel", onWheel as EventListener);
       if (wheelState.raf) cancelAnimationFrame(wheelState.raf);
     };
   }, [onNavigateSlice]);
@@ -225,6 +260,16 @@ function CanvasFrame({
     });
     return () => cancelAnimationFrame(id);
   }, [mode]);
+
+  useEffect(() => {
+    if (annotationCommitEnabled) return;
+    const id = requestAnimationFrame(() => {
+      setFreehandLive(null);
+      freehandStrokeRef.current = [];
+      freehandPointerIdRef.current = null;
+    });
+    return () => cancelAnimationFrame(id);
+  }, [annotationCommitEnabled]);
 
   useEffect(() => {
     if (mode !== "freehand") return;
@@ -256,13 +301,61 @@ function CanvasFrame({
     };
   }, [baseScale, frame.height, frame.width, zoom]);
 
+  /** Keep cursor-anchored zoom aligned after canvas dimensions update (Phase 7.2). */
+  useLayoutEffect(() => {
+    const anchor = scrollAnchorAfterZoomRef.current;
+    if (!anchor) return;
+    scrollAnchorAfterZoomRef.current = null;
+    const sc = scrollRef.current;
+    if (!sc) return;
+    const { z0, clientX, clientY } = anchor;
+    const sr = sc.getBoundingClientRect();
+    const vx = clientX - sr.left;
+    const vy = clientY - sr.top;
+    const cssW0 = frame.width * baseScale * z0;
+    const cssH0 = frame.height * baseScale * z0;
+    const mx = sc.scrollLeft + vx;
+    const my = sc.scrollTop + vy;
+    const ix = (mx / cssW0) * frame.width;
+    const iy = (my / cssH0) * frame.height;
+    const z1 = zoom;
+    const cssW1 = frame.width * baseScale * z1;
+    const cssH1 = frame.height * baseScale * z1;
+    const newMx = (ix / frame.width) * cssW1;
+    const newMy = (iy / frame.height) * cssH1;
+    const maxL = Math.max(0, sc.scrollWidth - sr.width);
+    const maxT = Math.max(0, sc.scrollHeight - sr.height);
+    sc.scrollLeft = Math.max(0, Math.min(newMx - vx, maxL));
+    sc.scrollTop = Math.max(0, Math.min(newMy - vy, maxT));
+  }, [zoom, baseScale, frame.height, frame.width]);
+
+  /** New slice: center the image in the viewport (after canvas has laid out). */
+  useLayoutEffect(() => {
+    const sc = scrollRef.current;
+    if (!sc) return;
+    const apply = () => {
+      const z = zoomRef.current;
+      const dw = frame.width * baseScale * z;
+      const dh = frame.height * baseScale * z;
+      const cw = sc.clientWidth;
+      const ch = sc.clientHeight;
+      if (cw === 0 || ch === 0) return;
+      sc.scrollLeft = Math.max(0, (dw - cw) / 2);
+      sc.scrollTop = Math.max(0, (dh - ch) / 2);
+    };
+    requestAnimationFrame(apply);
+  }, [frame.width, frame.height, baseScale]);
+
   const clientToImage = useCallback(
     (clientX: number, clientY: number): ImagePoint | null => {
-      const canvas = canvasRef.current;
-      if (!canvas) return null;
-      const rect = canvas.getBoundingClientRect();
-      const ox = clientX - rect.left;
-      const oy = clientY - rect.top;
+      const sc = scrollRef.current;
+      if (!sc) return null;
+      const sr = sc.getBoundingClientRect();
+      const vx = clientX - sr.left;
+      const vy = clientY - sr.top;
+      if (vx < 0 || vy < 0 || vx > sr.width || vy > sr.height) return null;
+      const ox = sc.scrollLeft + vx;
+      const oy = sc.scrollTop + vy;
       if (ox < 0 || oy < 0 || ox > cssW || oy > cssH) return null;
       const x = (ox / cssW) * frame.width;
       const y = (oy / cssH) * frame.height;
@@ -274,32 +367,35 @@ function CanvasFrame({
     [cssH, cssW, frame.height, frame.width],
   );
 
-  const seaFill = "rgba(46, 139, 87, 0.35)";
-  const seaStroke = "rgb(35, 104, 65)";
-
   const drawPoint = useCallback(
-    (ctx: CanvasRenderingContext2D, p: ImagePoint) => {
+    (ctx: CanvasRenderingContext2D, p: ImagePoint, style: AnnotationDrawStyle) => {
       const px = (p.x / frame.width) * cssW;
       const py = (p.y / frame.height) * cssH;
       ctx.beginPath();
       ctx.arc(px, py, 4, 0, Math.PI * 2);
-      ctx.fillStyle = seaFill;
-      ctx.strokeStyle = seaStroke;
+      ctx.fillStyle = style.fillPoint;
+      ctx.strokeStyle = style.stroke;
       ctx.lineWidth = 1.5;
       ctx.fill();
       ctx.stroke();
     },
-    [cssH, cssW, frame.height, frame.width, seaFill, seaStroke],
+    [cssH, cssW, frame.height, frame.width],
   );
 
   const drawLine = useCallback(
-    (ctx: CanvasRenderingContext2D, a: ImagePoint, b: ImagePoint, dashed = false) => {
+    (
+      ctx: CanvasRenderingContext2D,
+      a: ImagePoint,
+      b: ImagePoint,
+      dashed: boolean,
+      style: AnnotationDrawStyle,
+    ) => {
       const ax = (a.x / frame.width) * cssW;
       const ay = (a.y / frame.height) * cssH;
       const bx = (b.x / frame.width) * cssW;
       const by = (b.y / frame.height) * cssH;
       ctx.save();
-      ctx.strokeStyle = seaStroke;
+      ctx.strokeStyle = style.stroke;
       ctx.lineWidth = 2;
       if (dashed) ctx.setLineDash([6, 6]);
       ctx.beginPath();
@@ -308,7 +404,7 @@ function CanvasFrame({
       ctx.stroke();
       ctx.restore();
     },
-    [cssH, cssW, frame.height, frame.width, seaStroke],
+    [cssH, cssW, frame.height, frame.width],
   );
 
   const drawPolygon = useCallback(
@@ -316,10 +412,11 @@ function CanvasFrame({
       ctx: CanvasRenderingContext2D,
       pts: ImagePoint[],
       opts: { closed: boolean; fill: boolean; dashed: boolean },
+      style: AnnotationDrawStyle,
     ) => {
       if (pts.length === 0) return;
       ctx.save();
-      ctx.strokeStyle = seaStroke;
+      ctx.strokeStyle = style.stroke;
       ctx.lineWidth = 2;
       if (opts.dashed) ctx.setLineDash([6, 6]);
       ctx.beginPath();
@@ -330,21 +427,21 @@ function CanvasFrame({
       }
       if (opts.closed) ctx.closePath();
       if (opts.fill && opts.closed) {
-        ctx.fillStyle = "rgba(46, 139, 87, 0.18)";
+        ctx.fillStyle = style.fillPolygon;
         ctx.fill();
       }
       ctx.stroke();
       ctx.restore();
     },
-    [cssH, cssW, frame.height, frame.width, seaStroke],
+    [cssH, cssW, frame.height, frame.width],
   );
 
   /** Freehand stroke: open polyline with rounded caps (Phase 5). */
   const drawFreehandPolyline = useCallback(
-    (ctx: CanvasRenderingContext2D, pts: ImagePoint[]) => {
+    (ctx: CanvasRenderingContext2D, pts: ImagePoint[], style: AnnotationDrawStyle) => {
       if (pts.length < 2) return;
       ctx.save();
-      ctx.strokeStyle = seaStroke;
+      ctx.strokeStyle = style.stroke;
       ctx.lineWidth = 2;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
@@ -357,7 +454,7 @@ function CanvasFrame({
       ctx.stroke();
       ctx.restore();
     },
-    [cssH, cssW, frame.height, frame.width, seaStroke],
+    [cssH, cssW, frame.height, frame.width],
   );
 
   useEffect(() => {
@@ -388,43 +485,49 @@ function CanvasFrame({
       ctx.drawImage(off, 0, 0, frame.width, frame.height, 0, 0, cssW, cssH);
     }
 
-    // Final annotations.
+    // Final annotations (Phase 6: per-label color).
     for (const a of annotations) {
+      const st = resolveAnnotationStyle(a.labelId);
       if (a.type === "point") {
-        drawPoint(ctx, a.points[0]);
+        drawPoint(ctx, a.points[0], st);
       } else if (a.type === "line") {
-        drawLine(ctx, a.points[0], a.points[1]);
-        drawPoint(ctx, a.points[0]);
-        drawPoint(ctx, a.points[1]);
+        drawLine(ctx, a.points[0], a.points[1], false, st);
+        drawPoint(ctx, a.points[0], st);
+        drawPoint(ctx, a.points[1], st);
       } else if (a.type === "polygon") {
-        drawPolygon(ctx, a.points, { closed: true, fill: true, dashed: false });
-        for (const p of a.points) drawPoint(ctx, p);
+        drawPolygon(ctx, a.points, { closed: true, fill: true, dashed: false }, st);
+        for (const p of a.points) drawPoint(ctx, p, st);
       } else if (a.type === "freehand") {
-        drawFreehandPolyline(ctx, a.points);
+        drawFreehandPolyline(ctx, a.points, st);
       }
     }
 
     // Draft preview (uses current hover as dynamic endpoint).
     if (draft && hoverImage) {
       if (draft.type === "polygon" && draft.points.length > 0) {
-        drawPolygon(ctx, [...draft.points, hoverImage], { closed: false, fill: false, dashed: true });
-        for (const p of draft.points) drawPoint(ctx, p);
+        drawPolygon(
+          ctx,
+          [...draft.points, hoverImage],
+          { closed: false, fill: false, dashed: true },
+          draftStyle,
+        );
+        for (const p of draft.points) drawPoint(ctx, p, draftStyle);
       } else if (draft.type === "line") {
-        drawLine(ctx, draft.points[0], hoverImage, true);
-        drawPoint(ctx, draft.points[0]);
+        drawLine(ctx, draft.points[0], hoverImage, true, draftStyle);
+        drawPoint(ctx, draft.points[0], draftStyle);
       }
     } else if (draft && draft.type === "polygon") {
       // No hover (e.g. pointer left) — still show existing draft points.
       if (draft.points.length > 1) {
-        drawPolygon(ctx, draft.points, { closed: false, fill: false, dashed: true });
+        drawPolygon(ctx, draft.points, { closed: false, fill: false, dashed: true }, draftStyle);
       }
-      for (const p of draft.points) drawPoint(ctx, p);
+      for (const p of draft.points) drawPoint(ctx, p, draftStyle);
     } else if (draft && draft.type === "line") {
-      drawPoint(ctx, draft.points[0]);
+      drawPoint(ctx, draft.points[0], draftStyle);
     }
 
     if (freehandLive && freehandLive.length >= 2) {
-      drawFreehandPolyline(ctx, freehandLive);
+      drawFreehandPolyline(ctx, freehandLive, draftStyle);
     }
   }, [
     annotations,
@@ -432,6 +535,7 @@ function CanvasFrame({
     cssW,
     dpr,
     draft,
+    draftStyle,
     drawFreehandPolyline,
     drawLine,
     drawPoint,
@@ -442,6 +546,7 @@ function CanvasFrame({
     frame.rgba,
     frame.width,
     hoverImage,
+    resolveAnnotationStyle,
   ]);
 
   return (
@@ -453,51 +558,145 @@ function CanvasFrame({
         <IconButton
           tone="accent"
           label="Zoom in"
-          onClick={() => setZoom((z) => Math.min(6, Math.round((z + 0.1) * 10) / 10))}
+          onClick={() => {
+            const z0 = zoomRef.current;
+            const z1 = Math.min(6, Math.round((z0 + 0.1) * 10) / 10);
+            if (Math.abs(z1 - z0) < 1e-8) return;
+            const sc = scrollRef.current;
+            const r = sc?.getBoundingClientRect();
+            scrollAnchorAfterZoomRef.current = {
+              z0,
+              clientX: r ? r.left + r.width / 2 : 0,
+              clientY: r ? r.top + r.height / 2 : 0,
+            };
+            setZoom(z1);
+          }}
         >
           <Plus className="h-5 w-5" aria-hidden="true" />
         </IconButton>
         <IconButton
           label="Zoom out"
-          onClick={() => setZoom((z) => Math.max(0.2, Math.round((z - 0.1) * 10) / 10))}
+          onClick={() => {
+            const z0 = zoomRef.current;
+            const z1 = Math.max(0.2, Math.round((z0 - 0.1) * 10) / 10);
+            if (Math.abs(z1 - z0) < 1e-8) return;
+            const sc = scrollRef.current;
+            const r = sc?.getBoundingClientRect();
+            scrollAnchorAfterZoomRef.current = {
+              z0,
+              clientX: r ? r.left + r.width / 2 : 0,
+              clientY: r ? r.top + r.height / 2 : 0,
+            };
+            setZoom(z1);
+          }}
         >
           <Minus className="h-5 w-5" aria-hidden="true" />
         </IconButton>
         <IconButton
           label="Default size"
-          onClick={() => setZoom(DEFAULT_ZOOM)}
+          onClick={() => {
+            const z0 = zoomRef.current;
+            const z1 = DEFAULT_ZOOM;
+            if (Math.abs(z1 - z0) < 1e-8) return;
+            const sc = scrollRef.current;
+            const r = sc?.getBoundingClientRect();
+            scrollAnchorAfterZoomRef.current = {
+              z0,
+              clientX: r ? r.left + r.width / 2 : 0,
+              clientY: r ? r.top + r.height / 2 : 0,
+            };
+            setZoom(z1);
+          }}
         >
           <Maximize2 className="h-5 w-5" aria-hidden="true" />
         </IconButton>
       </div>
 
-      <canvas
-        ref={canvasRef}
-        role="img"
-        aria-label="OCT slice canvas"
-        className="cursor-crosshair rounded-xl border border-[color:var(--color-ocean-green)]/25 bg-black/5"
+      <div
+        ref={scrollRef}
+        className="max-h-[min(70vh,650px)] max-w-[min(1100px,100%)] overflow-auto rounded-xl border border-[color:var(--color-ocean-green)]/25 bg-black/5 shadow-inner"
         style={{ touchAction: "none" }}
-        onPointerMove={(e) => {
-          const p = clientToImage(e.clientX, e.clientY);
-          setHoverImage(p);
-          if (mode !== "freehand") return;
-          if (freehandPointerIdRef.current !== e.pointerId) return;
-          if ((e.buttons & 1) === 0) return;
-          if (!p) return;
-          const prev = freehandStrokeRef.current;
-          const last = prev[prev.length - 1];
-          if (last) {
-            const dx = p.x - last.x;
-            const dy = p.y - last.y;
-            if (dx * dx + dy * dy < 0.72 * 0.72) return;
-          }
-          const next = [...prev, p];
-          freehandStrokeRef.current = next;
-          setFreehandLive(next);
-        }}
         onPointerLeave={() => setHoverImage(null)}
+        onPointerMove={(e) => {
+          setHoverImage(clientToImage(e.clientX, e.clientY));
+          const d = panDragRef.current;
+          if (mode === "pan" && d?.active) {
+            const sc = scrollRef.current;
+            if (sc) {
+              sc.scrollLeft = d.scrollL - (e.clientX - d.startX);
+              sc.scrollTop = d.scrollT - (e.clientY - d.startY);
+            }
+          }
+        }}
         onPointerDown={(e) => {
-          if (mode !== "freehand" || e.button !== 0) return;
+          if (mode !== "pan" || e.button !== 0) return;
+          const sc = scrollRef.current;
+          if (!sc) return;
+          e.preventDefault();
+          panDragRef.current = {
+            active: true,
+            startX: e.clientX,
+            startY: e.clientY,
+            scrollL: sc.scrollLeft,
+            scrollT: sc.scrollTop,
+          };
+          (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+        }}
+        onPointerUp={(e) => {
+          if (mode !== "pan") return;
+          if (panDragRef.current?.active) {
+            panDragRef.current = null;
+            try {
+              (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
+            } catch {
+              /* ok */
+            }
+          }
+        }}
+        onPointerCancel={(e) => {
+          panDragRef.current = null;
+          try {
+            (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
+          } catch {
+            /* ok */
+          }
+        }}
+      >
+        <canvas
+          ref={canvasRef}
+          role="img"
+          aria-label="OCT slice canvas"
+          className={
+            mode === "pan"
+              ? "block cursor-grab touch-none active:cursor-grabbing"
+              : "block cursor-crosshair touch-none"
+          }
+          style={{
+            touchAction: "none",
+            pointerEvents: mode === "pan" ? "none" : "auto",
+          }}
+          onPointerMove={(e) => {
+            if (mode !== "freehand") return;
+            if (!annotationCommitEnabled) return;
+            if (freehandPointerIdRef.current !== e.pointerId) return;
+            if ((e.buttons & 1) === 0) return;
+            const p = clientToImage(e.clientX, e.clientY);
+            if (!p) return;
+            const prev = freehandStrokeRef.current;
+            const last = prev[prev.length - 1];
+            if (last) {
+              const dx = p.x - last.x;
+              const dy = p.y - last.y;
+              if (dx * dx + dy * dy < 0.72 * 0.72) return;
+            }
+            const next = [...prev, p];
+            freehandStrokeRef.current = next;
+            setFreehandLive(next);
+          }}
+          onPointerDown={(e) => {
+            if (mode === "pan") return;
+            if (mode !== "freehand" || e.button !== 0) return;
+          if (!annotationCommitEnabled) return;
           const p = clientToImage(e.clientX, e.clientY);
           if (!p) return;
           e.preventDefault();
@@ -520,7 +719,9 @@ function CanvasFrame({
           const pts = freehandStrokeRef.current;
           freehandStrokeRef.current = [];
           setFreehandLive(null);
-          if (pts.length >= 2 && onFreehandComplete) onFreehandComplete(pts);
+          if (pts.length >= 2 && annotationCommitEnabled && onFreehandComplete) {
+            onFreehandComplete(pts);
+          }
         }}
         onPointerCancel={(e) => {
           if (mode !== "freehand") return;
@@ -535,12 +736,14 @@ function CanvasFrame({
             suppressNextClickRef.current = false;
             return;
           }
+          if (mode === "pan") return;
           if (mode === "freehand") return;
           if (!onClickImage) return;
           const p = clientToImage(e.clientX, e.clientY);
           if (p) onClickImage(p);
         }}
         onDoubleClick={(e) => {
+          if (mode === "pan") return;
           if (mode === "freehand") return;
           if (!onDoubleClickImage) return;
           const p = clientToImage(e.clientX, e.clientY);
@@ -574,10 +777,20 @@ function CanvasFrame({
           const dist = Math.hypot(dx, dy);
           const midX = (t1.clientX + t2.clientX) / 2;
 
-          // Pinch zoom.
+          // Pinch zoom (anchor on pinch midpoint — Phase 7).
           if (touchRef.current.startDist > 0) {
             const ratio = dist / touchRef.current.startDist;
-            setZoom(clampZoom(touchRef.current.startZoom * ratio));
+            const z0 = zoomRef.current;
+            const z1 = clampZoom(touchRef.current.startZoom * ratio);
+            if (Math.abs(z1 - z0) > 1e-6) {
+              scrollAnchorAfterZoomRef.current = {
+                z0,
+                clientX: (t1.clientX + t2.clientX) / 2,
+                clientY: (t1.clientY + t2.clientY) / 2,
+              };
+              zoomRef.current = z1;
+              setZoom(z1);
+            }
           }
 
           // Two-finger horizontal swipe to change slice.
@@ -602,7 +815,8 @@ function CanvasFrame({
         onTouchEnd={() => {
           touchRef.current.active = false;
         }}
-      />
+        />
+      </div>
       <p className="mt-3 font-mono text-xs text-[color:var(--color-muted)]">
         {frame.width}×{frame.height} · {(baseScale * zoom).toFixed(2)}×
         {hoverImage ? (
