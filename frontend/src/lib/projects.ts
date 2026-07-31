@@ -6,6 +6,8 @@ export type Project = {
   id: string;
   name: string;
   description: string;
+  annotations?: string;
+  labels?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -33,13 +35,15 @@ export async function createProject(input: {
 
 export async function updateProject(
   id: string,
-  input: { name: string; description?: string },
+  input: { name: string; description?: string; annotations?: string; labels?: string },
 ): Promise<Project> {
   return await api<Project>(`/api/projects/${encodeURIComponent(id)}`, {
     method: "PUT",
     body: JSON.stringify({
       name: input.name,
       description: input.description ?? "",
+      annotations: input.annotations,
+      labels: input.labels,
     }),
   });
 }

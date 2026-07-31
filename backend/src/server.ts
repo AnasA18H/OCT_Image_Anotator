@@ -11,7 +11,7 @@ app.use(
     origin: [/^http:\/\/localhost:\d+$/, /^http:\/\/127\.0\.0\.1:\d+$/],
   }),
 );
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "10mb" }));
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
@@ -44,16 +44,23 @@ app.get("/api/projects/:id", async (req, res) => {
 
 app.put("/api/projects/:id", async (req, res) => {
   const id = req.params.id;
-  const body = req.body as { name?: unknown; description?: unknown };
+  const body = req.body as { name?: unknown; description?: unknown; annotations?: unknown; labels?: unknown };
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const description = typeof body.description === "string" ? body.description : "";
+  const annotations = typeof body.annotations === "string" ? body.annotations : undefined;
+  const labels = typeof body.labels === "string" ? body.labels : undefined;
 
   if (!name) return res.status(400).json({ error: "name is required" });
 
   try {
     const project = await prisma.project.update({
       where: { id },
-      data: { name, description },
+      data: {
+        name,
+        description,
+        ...(annotations !== undefined ? { annotations } : {}),
+        ...(labels !== undefined ? { labels } : {}),
+      },
     });
     res.json(project);
   } catch {

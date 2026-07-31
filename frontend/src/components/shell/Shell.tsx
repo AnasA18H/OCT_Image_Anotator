@@ -9,10 +9,10 @@ const KEY = "oct.shell.navCollapsed.v1";
 const EVENT_NAME = "oct-shell";
 
 // Keep first render deterministic.
-let cachedSnapshot = "0";
+let cachedSnapshot = "1";
 
 function getSnapshot(): string {
-  if (typeof window === "undefined") return "0";
+  if (typeof window === "undefined") return "1";
   return cachedSnapshot;
 }
 
@@ -35,11 +35,11 @@ function subscribe(onStoreChange: () => void) {
 }
 
 export function Shell() {
-  const raw = useSyncExternalStore(subscribe, getSnapshot, () => "0");
+  const raw = useSyncExternalStore(subscribe, getSnapshot, () => "1");
   const collapsed = raw === "1";
 
   useEffect(() => {
-    const v = window.localStorage.getItem(KEY) ?? "0";
+    const v = window.localStorage.getItem(KEY) ?? "1";
     if (v !== cachedSnapshot) {
       cachedSnapshot = v;
       window.dispatchEvent(new Event(EVENT_NAME));

@@ -36,14 +36,14 @@ export function colorToAnnotationStyle(cssColor: string): AnnotationDrawStyle {
     return {
       stroke: "rgb(55, 55, 55)",
       fillPoint: "rgba(90, 90, 90, 0.38)",
-      fillPolygon: "rgba(90, 90, 90, 0.2)",
+      fillPolygon: "rgba(90, 90, 90, 0.12)",
     };
   }
   const { r, g, b } = rgb;
   return {
     stroke: `rgb(${Math.round(r * 0.55)}, ${Math.round(g * 0.55)}, ${Math.round(b * 0.55)})`,
     fillPoint: `rgba(${r}, ${g}, ${b}, 0.38)`,
-    fillPolygon: `rgba(${r}, ${g}, ${b}, 0.2)`,
+    fillPolygon: `rgba(${r}, ${g}, ${b}, 0.12)`,
   };
 }
 
@@ -54,7 +54,7 @@ export function colorToAnnotationStyleActive(cssColor: string): AnnotationDrawSt
     return {
       stroke: "rgb(75, 75, 75)",
       fillPoint: "rgba(110, 110, 110, 0.58)",
-      fillPolygon: "rgba(110, 110, 110, 0.34)",
+      fillPolygon: "rgba(110, 110, 110, 0.22)",
     };
   }
   const { r, g, b } = rgb;
@@ -64,7 +64,7 @@ export function colorToAnnotationStyleActive(cssColor: string): AnnotationDrawSt
   return {
     stroke: `rgb(${strokeR}, ${strokeG}, ${strokeB})`,
     fillPoint: `rgba(${r}, ${g}, ${b}, 0.58)`,
-    fillPolygon: `rgba(${r}, ${g}, ${b}, 0.36)`,
+    fillPolygon: `rgba(${r}, ${g}, ${b}, 0.22)`,
   };
 }
 

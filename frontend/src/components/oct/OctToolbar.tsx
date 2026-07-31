@@ -14,9 +14,6 @@ export function OctToolbar({
   return (
     <header className="flex min-h-14 items-center gap-3 border-b border-[color:var(--color-ocean-green)]/20 bg-[color:var(--color-surface-2)] px-4 py-2">
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--color-ocean-green)]/35 bg-[color:var(--color-surface)] p-1 shadow-sm shadow-black/[0.03]">
-          <img src="/logo.png" alt="" className="h-8 w-8 object-contain" draggable={false} />
-        </div>
         <div className="min-w-0">
           <p className="font-heading truncate text-sm font-semibold tracking-tight text-[color:var(--color-foreground)]">
             <span className="text-[color:var(--color-ocean-green)]">OCT</span> Annotator

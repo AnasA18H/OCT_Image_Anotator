@@ -1,0 +1,283 @@
+
+ITECH3208 – Project 1
+Web Annotation Tool
+Project Vision Statement & Roadmap
+Federation University Australia  ·  Teaching Period 2026/05
+Document
+Version
+Date
+Status
+Vision & Roadmap
+1.0
+March 2026
+Submitted
+
+Team Member
+Student ID
+Role
+Abdulla Hamad Salem Alameri
+30455692
+Scrum Master
+Nehayan Abdulla Aljaberi
+30455840
+Product Owner
+Mohammed Alketbi
+30455709
+Developer: Frontend
+Ameera Alkhanbashi
+30455837
+Developer: Backend
+Omran Almarzooqi
+30455711
+Developer: UI/UX & Testing
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Contents
+1. Project Vision Statement	2
+1.1 Vision Statement	2
+1.2 Problem Context	2
+1.3 Target Users	2
+1.4 High-Level Goals	3
+1.5 Key System Capabilities	3
+2. Project Roadmap	3
+2.1 Overview	4
+2.2 Sprint Roadmap	4
+2.3 High-Level Timeline	5
+2.4 Client Communication Plan	6
+2.5 Technology Stack (Preliminary)	6
+
+ 
+1. Project Vision Statement
+1.1 Vision Statement
+The group discussion and the initial consultation with the clients assisted in determining the following vision statement, which will be put in our virtual team room to remind everyone in the team on the right path to go and motivate them to complete the project.
+
+WHO medical imaging professionals and researchers who need to take their OCT annotation functionality off-desktop and into the cloud THE OCT Web Annotation Tool is a browser-based GUI application with the proven ability to provide a smooth cloud-based annotation experience, providing freehand and keypoint annotation tools, customisable surface label palette with pre-defined ordering, pan and zoom on volumetric high-resolution images and JSON output,
+1.2 Problem Context
+Medical image annotation is a fledgling research and practice in the field of ophthalmology. Images taken by Optical Coherence Tomography (OCT) generate a volumetric image of the retina and the accurate visualization of the boundaries of retinal surfaces such as the inner limiting membrane (ILM) and the retinal pigment epithelium (RPE) is necessary to:
+    • Derivation of clinical measures (e.g retinal layer thickness)
+    • Generation of ground-truth data to be used to train AI and machine learning models.
+    • Diagnosis and surveillance of eye diseases.
+Existing annotation systems are also in general desktop-based, lack custom surface definitions, and output data that would not necessarily be readily compatible with other pipelines in research. The necessity to possess a light and a web-based tool that enables the researcher to possess direct authority regarding the characterization of surfaces, order and the decharge of information is apparent.
+
+1.3 Target Users
+User
+Need
+Benefit from Tool
+Ophthalmology Researcher
+Label flexible surface of OCT volumes annotated.
+Reproducible, exportable annotations
+AI/ML Engineer
+Training data Ground-truth data.
+Structured, well-documented output files
+Clinical Imaging Technician
+Observe and scan retinal layers.
+Intuitive GUI for loading and viewing OCT data
+
+1.4 High-Level Goals
+The team has identified the following goals, differentiating between mandatory (must-have) features and optional (nice-to-have) enhancements:
+
+Priority
+Goal
+Outcome
+MUST
+See volume images on the browser.
+OCT slices are navigated pictorially.
+MUST
+Create retinal surface annotations in line and closed polygons.
+Basic annotation functionality provided.
+MUST
+Arbitrary number of labels on the surface that are predefined and extendable.
+There is support of both standard and custom retinal surfaces.
+MUST
+Create, delete, rearrange edit surfaces labels.
+Annotation keep retinal layers in their natural order.
+MUST
+Export the data to a readable data format, document-based.
+Connection with down-stream pipelines.
+MUST
+Export annotations to JSON format with documented schema
+Client confirmed: JSON is sufficient for this project
+SHOULD
+Undo/redo annotation.
+Better usability and fault tolerance.
+COULD
+Annotation tool keyboard shortcuts.
+Power-user efficiency
+COULD
+Several annotated volumes can be exported in batch.
+Productivity of research.
+
+1.5 Key System Capabilities
+    • Web-based interface: it may be utilized in any modern browser (Firefox, Safari, Edge); it is not necessary to install it by the end users.
+    • OCT Volume Loading: load DICOM and TIFF volumetric files (100-512 slices/ file, 1000-1024 pixels/ single frame)
+    • Pan and Zoom: pan and zoom of high-resolution slices; annotations are not lost when the process is carried out.
+    • Annotation Tools: free hand annotation (new feature, priority of the client 2), line/polygon keypoint annotation.
+    • Annotation Palette: is able to add, delete, rearrange preset retinal surface labels (ILM, RPE, NFL etc.) and every annotation is linked to a surface label; every annotation is a list of points.
+    • JSON Export: JSON annotations, based on defined schema; acceptable enough to be re-used by a client downstream.
+    • Eric (US East Coast): the team will reserve meetings such that it accommodates the time zone difference between the EST and EDT.
+2. Project Roadmap
+2.1 Overview
+The project will be carried out with the assumption of two sprints of ITECH3208 (Project 1), and can be extended in ITECH3209 (Project 2) at a later semester. The roadmap below identifies high-level sprint objectives, major deliverables and Definition of Done of each sprint outcome. The roadmap is a dynamic document and will be facilitated each time when the sprint planning is carried out in consultation with the client.
+
+2.2 Sprint Roadmap
+
+Sprint 1  Weeks 5–7   Design & Initial Implementation
+Sprint Goal: Design architectural base, select the technology stack, and deliver a working prototype which will be able to load an image of OCT and display it within the browser.
+
+Deliverable
+Description
+Definition of Done
+Architecture Document
+System architecture drawing (MVC/component model), decision and rationalization of tech stack, data model/ERD of annotation structures.
+Document read by group; technical stack accepted by manager.
+OCT Image Loader (Prototype)
+Basic GUI to load and view a single slice in the browser of an OCT volume; navigational controls to scroll through slices.
+An OCT file, which is tested, will load in and appear in at least one target browser.
+UI Wireframes
+Tool panel, surface label panel and main annotation interface low-fidelity wireframes; client discussed.
+Client has checked and reviewed; wireframes revised.
+Product Backlog (Sprint 1)
+Trello board layout using Sprint 1 user stories; assignments of team members to tasks; estimated story points.
+Each PBIs are in the form of user stories; acceptance criteria are specified against each story.
+Technical Report (Sprint 1)
+Section A (Project definition and scope) and B (Design and Architecture) completed and handed over.
+Report was submitted through Moodle by Week 8, Friday 11:59pm.
+
+Sprint 2  ·  Weeks 8–12  ·  Full Implementation, Testing & Final Report
+Sprint Goal: To implement a tested and documented web OCT annotation tool, demonstrating the feasibility of cloud-based annotation for high-resolution OCT, with freehand annotation, pan/zoom, surface palette, per-slice storage of annotations, JSON export, and user manual for the tool.
+
+Deliverable
+Description
+Definition of Done
+Pan & Zoom + OCT Viewer
+Smooth pan and zoom of large OCT scans up to (1000x1024px);; annotations are persistent across pan/zoom; client confirmed this is their most important new feature gap
+
+Eases out on target system; annotations stay in place when panning and zooming
+Freehand Annotation Tool
+New freehand tool to click and drag to add smooth surfaces; client confirmed this is the biggest new feature gap
+Freehand annotation; anchored to current surface label; persists per slice; client reviews and approves
+Keypoint Annotation Engine
+New line tool for keypoint annotations; each annotation is a list of points; annotations are linked to a surface label; annotations persists across slices
+Tools run on client-provided OCT data; client review of annotations; unit tests finish
+Surface Label Palette
+Retinal surface labels as palette, can add, delete, reorder; each annotation can be linked to a label
+Labels default to client documentation; client labels persist through session; order is z-order of retinal layers
+JSON Export Module
+Export all the annotations for the volume as a single JSON file; schema documented in README; confirmed with client that this is sufficient (client does not need CSV format)
+JSON output as required (client Eric); schema defined
+Testing Suite
+At least 5 sample tests: load file, move slices, freehand, edit surface labels, export JSON
+All unit tests are passing; documented with input, expected, actual, pass/fail
+User Manual
+Setup guide, guide to using key features with screenshots, and troubleshooting
+Reviewed and tested by at least one other team member; client review
+Final Technical Report
+Entire report with all sections (A-E); clean and well documented GitHub repository, good commit messages; 14 Trello PBI cards
+Submitted to Moodle by Week 13 Friday 11:59pm; GitHub repository
+
+2.3 High-Level Timeline
+
+Week
+Key Activity
+Client Touchpoint
+Milestone
+1–4
+Team building, charter, Trello development, project vision, initial meeting with the client.
+First meeting on vision sharing; requirements discussion.
+Vision & Roadmap due Fri Wk 4
+5–7
+Sprint 1: Sprint 1 presentation, Sprint 1, Architectural design, and wireframes, OCT loader prototype.
+Sprint 1 review of the client; feedback on wireframe.
+Sprint 1 showcase Wk 8 (in-class)
+8
+Sprint 1 presentation; Sprint 1 deliverable and artefacts; Sprint 2 design.
+Feedback on clients added to Sprint 2 backlog.
+Reports due Fri Wk 8
+9–12
+Sprint 2: Complete annotation engine, surface manager, export, testing, user manual, final report.
+Sprint 2 client examination; confirmation of export form.
+Sprint 2 showcase Wk 12 (in-class)
+13
+Final submission: final technical report, artefacts of team, GitHub repo.
+Client signing off and demos.
+All docs due Fri Wk 13
+
+2.4 Client Communication Plan
+
+Meeting Type
+Frequency / Timing
+Purpose
+Sprint Planning
+Start of each sprint; agreed time US/AU.
+Prioritise backlog, agree sprint goal
+Sprint Review
+By the end of the sprint; using MS Teams.
+Demo deliverables, gather feedback
+Ad-hoc Check-ins
+Asynchronous video message; email, on demand.
+Clarify requirements, resolve blockers
+Async Updates
+Weekly; via email/ Teams message.
+Keep client informed of progress
+
+2.5 Technology Stack (Preliminary)
+The identified technology stack is tentative, but can be customized in the course of the Sprint 1 architecture review and client consultation:
+
+Category
+Technology
+Justification
+Frontend Framework
+React.js or Vanilla JS + HTML5 Canvas
+Riche browser-based UI; Canvas API designed to render images and add annotation overlay.
+Backend / Server
+Python (Flask or FastAPI)
+Compact; powerful image processing packages (NumPY, Pillow); known to team.
+Image Handling
+NumPy / Pillow / pydicom
+DICOM and image array processing Python libraries which are industry-standard.
+Data Storage/Export
+JSON (confirmed by client, CSV not required)
+Human readable; can be read easily by Python, MATLAB, R; well documented schema.
+Version Control
+GitHub Classroom
+Unit requirement; branch strategy, featuring branches, develop and main.
+Project Management
+Trello
+Kanban is an easily accessible, graphical tool; it enables user story tracking and collaboration between teams.
+Communication
+Microsoft Teams
+Mandated by unit in team communication and record of meetings.
+
+Trello Board and Work
+
+
+
+

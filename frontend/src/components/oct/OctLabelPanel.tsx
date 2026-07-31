@@ -14,6 +14,8 @@ type Props = {
   onClearActiveLabel: () => void;
   onAddLabel: (name: string) => void;
   onDeleteLabel: (id: string) => void;
+  showAllLayers: boolean;
+  onToggleShowAll: () => void;
 };
 
 export function OctLabelPanel({
@@ -23,6 +25,8 @@ export function OctLabelPanel({
   onClearActiveLabel,
   onAddLabel,
   onDeleteLabel,
+  showAllLayers,
+  onToggleShowAll,
 }: Props) {
   const [newName, setNewName] = useState("");
 
@@ -36,21 +40,39 @@ export function OctLabelPanel({
   return (
     <aside className="hidden w-72 shrink-0 border-l border-[color:var(--color-ocean-green)]/20 bg-[color:var(--color-surface-2)] p-4 lg:block">
       <div className="rounded-lg border border-[color:var(--color-ocean-green)]/25 bg-[color:var(--color-surface)] p-4 shadow-sm shadow-black/[0.03]">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
           <p className="min-w-0 font-heading text-sm font-semibold tracking-tight">
-            <span className="text-[color:var(--color-ocean-green)]">Labels</span>
+            <span className="text-[color:var(--color-grey)]">Labels</span>
           </p>
+        </div>
+
+        {/* Modern Show All Layers Toggle Switch */}
+        <div className="mt-3.5 mb-2 flex items-center justify-between px-1">
+          <span className="text-sm font-medium text-[color:var(--color-ocean-green)]">Show all</span>
           <button
             type="button"
-            onClick={onClearActiveLabel}
-            disabled={activeLabelId === null}
-            className="shrink-0 rounded-2xl border border-[color:var(--color-ocean-green)] bg-transparent px-3 py-1 text-xs font-semibold text-[color:var(--color-ocean-green)] transition hover:bg-[color:var(--color-ocean-green)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--color-ocean-green)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--color-surface)] disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label="Deselect active label"
+            onClick={() => onToggleShowAll()}
+            className={
+              "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none " +
+              (showAllLayers
+                ? "bg-[color:var(--color-ocean-green)]"
+                : "bg-slate-200 dark:bg-slate-700")
+            }
+            role="switch"
+            aria-checked={showAllLayers}
           >
-            Deselect
+            <span
+              className={
+                "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out " +
+                (showAllLayers ? "translate-x-4" : "translate-x-0")
+              }
+            />
           </button>
         </div>
-        <p className="mt-1 text-xs text-[color:var(--color-muted)]">
+
+        <div className="border-t border-slate-200 dark:border-slate-800/80 my-2.5" aria-hidden />
+
+        <p className="mt-2 text-xs text-[color:var(--color-muted)]">
           Choose the active layer; new shapes use its color.
         </p>
 
@@ -70,7 +92,7 @@ export function OctLabelPanel({
                 >
                   <button
                     type="button"
-                    onClick={() => onSelectLabel(lab.id)}
+                    onClick={() => active ? onClearActiveLabel() : onSelectLabel(lab.id)}
                     className={
                       "flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left text-sm outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-[color:var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--color-surface)] " +
                       (active ? "" : "hover:bg-black/[0.03]")

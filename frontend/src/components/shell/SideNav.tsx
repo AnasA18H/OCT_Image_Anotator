@@ -1,7 +1,7 @@
 "use client";
 
 import { Link, useLocation } from "react-router-dom";
-import { FolderKanban, ScanLine } from "lucide-react";
+import { Folder, Pencil } from "lucide-react";
 import { HorizontalRule } from "../ui";
 
 type NavItem = { href: string; label: string };
@@ -18,8 +18,8 @@ function isActive(pathname: string, href: string) {
 }
 
 function Icon({ kind }: { kind: "projects" | "annotate" }) {
-  if (kind === "projects") return <FolderKanban className="h-[18px] w-[18px]" aria-hidden="true" />;
-  return <ScanLine className="h-[18px] w-[18px]" aria-hidden="true" />;
+  if (kind === "projects") return <Folder className="h-[18px] w-[18px]" aria-hidden="true" />;
+  return <Pencil className="h-[18px] w-[18px]" aria-hidden="true" />;
 }
 
 export function SideNav({
@@ -38,10 +38,10 @@ export function SideNav({
         (collapsed ? "w-24" : "w-80")
       }
     >
-      <div className="pointer-events-auto flex h-full flex-col rounded-2xl border-[3px] border-[color:var(--color-ocean-green)] bg-[color:var(--color-surface)] shadow-lg shadow-black/5">
+      <div className="pointer-events-auto flex h-full flex-col rounded-2xl border-2 border-slate-200 dark:border-slate-300 bg-[color:var(--color-surface)] shadow-lg shadow-black/5">
         <div
           className={
-            "border-b border-[color:var(--color-border)] " +
+            "border-b border-slate-200 dark:border-slate-200 " +
             (collapsed ? "px-2 py-3" : "px-4 py-4")
           }
         >
@@ -80,23 +80,23 @@ export function SideNav({
                     "flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--color-ocean-green)]/40 " +
                     (collapsed ? " w-16 justify-center px-0" : " w-full") +
                     (active
-                      ? "bg-[color:var(--color-surface-2)] text-[color:var(--color-foreground)]"
-                      : "text-[color:var(--color-muted)] hover:bg-[color:var(--color-surface-2)] hover:text-[color:var(--color-foreground)]")
+                      ? "bg-slate-100/65 dark:bg-white/10 text-[color:var(--color-ocean-green)] font-bold"
+                      : "text-slate-400 dark:text-slate-500 hover:bg-slate-100/30 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-300")
                   }
                 >
                   <span
                     className={
-                      "grid h-11 w-11 shrink-0 place-items-center rounded-xl " +
+                      "grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-transparent " +
                       (active
-                        ? "bg-[color:var(--color-ocean-green)]/10 text-[color:var(--color-ocean-green)]"
-                        : "bg-[color:var(--color-surface-2)] text-[color:var(--color-muted)]")
+                        ? "text-[color:var(--color-ocean-green)]"
+                        : "text-slate-400 dark:text-slate-500")
                     }
                     aria-hidden="true"
                   >
                     <Icon kind={kind} />
                   </span>
                   {!collapsed ? (
-                    <span className="min-w-0 flex-1 font-medium">{it.label}</span>
+                    <span className="min-w-0 flex-1 font-semibold">{it.label}</span>
                   ) : (
                     <span className="sr-only">{it.label}</span>
                   )}

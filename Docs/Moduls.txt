@@ -1,6 +1,6 @@
 Web Annotation Tool – Module List
 Also track client requirements (C/A/L/E/D/N) in Docs/RequirementsCoverage.txt vs Docs/ProjectInfo.txt — update both when scope changes.
-Progress: Phase 3.1–3.4 implemented (image-space x/y, click points, per-slice storage, clear slice). Phase 2.2 TIFF done. Phase 2.1 & 2.3: uncompressed / non-fragment DICOM in dicomWorker (Explicit/Implicit VR LE + BE raw Pixel Data; multi-frame via NumberOfFrames). JPEG/J2K/encapsulated not supported — use uncompressed or TIFF. Phase 1.6 mock data skipped (real volumes only). Phase 5.1–5.3: freehand mode (pointer drag, release to commit, live polyline; Esc cancels in-progress stroke). Phase 6.1–6.7: label palette (ILM/RPE/NFL defaults, active label, per-label colors on new annotations, add/delete with confirm + cross-slice cleanup, reorder up/down). Phase 7.1–7.4: zoom +/- toolbar, trackpad pinch + smoother wheel, cursor-centered zoom (wheel + pinch + buttons), scroll viewport, Pan mode (hand tool drag), image-space annotations stay aligned (clientToImage uses scroll offset).
+Progress: Phase 3.1–3.4 implemented (image-space x/y, click points, per-slice storage, clear slice). Phase 2.2 TIFF done. Phase 2.1 & 2.3: uncompressed / non-fragment DICOM in dicomWorker (Explicit/Implicit VR LE + BE raw Pixel Data; multi-frame via NumberOfFrames). JPEG/J2K/encapsulated not supported — use uncompressed or TIFF. Phase 1.6 mock data skipped (real volumes only). Phase 5.1–5.3: freehand mode (pointer drag, release to commit, live polyline; Esc cancels in-progress stroke). Phase 6.1–6.7: label palette (ILM/RPE/NFL defaults, active label, per-label colors on new annotations, add/delete with confirm + cross-slice cleanup, reorder up/down). Phase 7.1–7.5: zoom +/- toolbar, trackpad pinch + smoother wheel, cursor-centered zoom (wheel + pinch + buttons), scroll viewport, Pan mode (hand tool drag), image-space annotations stay aligned (clientToImage uses scroll offset), and Magnifier Glass tool with adjustable lens zoom. Phase 8.1–8.5: Edit mode (pencil tool), click near vertex or on stroke/fill to select, drag vertex to move (one undo step), Delete/Backspace removes selected annotation, Undo/Redo toolbar + Ctrl/Cmd+Z / Shift+Z (existing history).
 PHASE 1: Foundation (Sprint 1)
 Module	What Needs to Be Done
 1.1	Create the basic page with a canvas area, toolbar area, and label panel area
@@ -33,7 +33,7 @@ Module	What Needs to Be Done
 5.3	Freehand line follows mouse exactly during drag
 PHASE 6: Surface Label Palette
 Module	What Needs to Be Done
-6.1	Display default labels: ILM, RPE, NFL
+6.1	Display default labels: ILM, RPE, NFLFs
 6.2	Click label to make it active (highlight it)
 6.3	New annotations use the active label's color
 6.4	Add "Add Label" button. User types new label name, gets random color
@@ -46,6 +46,7 @@ Module	What Needs to Be Done
 7.2	Mouse wheel zooms in/out centered on cursor position
 7.3	Add Pan Mode. Click and drag to move the viewport
 7.4	CRITICAL: Annotations stay perfectly aligned when zooming or panning
+7.5	Add Magnifier Glass tool on left floating toolbar with adjustable lens zoom slider and button controls
 PHASE 8: Editing Annotations
 Module	What Needs to Be Done
 8.1	Add Edit Mode. Click near a point to select it
